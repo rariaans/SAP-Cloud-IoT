@@ -1,0 +1,41 @@
+
+
+    {
+
+      “authenticationMethod”: “none”,
+      “routes”: [
+        {
+          “path”: “/sensordata”,
+          “target”: {
+            “type”: “destination”,
+            “name”: “iot_sensordata_odata”
+          },
+
+          “description”: “Fish import sensor data”
+        },
+
+        {
+
+          “path”: “/rdms_api”,
+          “target”: {
+            “type”: “destination”,
+            “name”: “iot_devices_odata”
+          },
+
+          “description”: “List of devices, device types and message types”
+
+        },
+
+        {
+
+          “path”: “/sapui5”,
+          “target”: {
+            “type”: “service”,
+            “name”: “sapui5”,
+            “entryPath”: “/resources”
+          },
+
+          “description”: “SAPUI5”
+        }
+      ]
+    }
