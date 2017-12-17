@@ -1,0 +1,325 @@
+    <!DOCTYPE HTML>
+    <html>
+    <head>
+    <meta http-equiv=”X-UA-Compatible” content=”IE=edge” />
+
+    <title>Rui’s Fish Import/Export Inc.</title>
+    <!– You might want to use this bootstrap instead for local testing  –>
+    <script src=”https://sapui5.hana.ondemand.com/resources/sap-ui-core.js“
+            type=”text/javascript” id=”sap-ui-bootstrap”
+            data-sap-ui-libs=”sap.ui.commons, sap.suite.ui.commons, sap.m, sap.ui.core, sap.makit”
+            data-sap-ui-theme=”sap_bluecrystal”>
+    </script>
+
+    <!– ###################################################### –>
+    <!– DATA MODEL functions                                    –>
+    <!– ###################################################### –>
+
+    <script type=”text/javascript”>
+        var getModelFromURL = function(url) {
+            var url = url;
+            var oModel = new sap.ui.model.json.JSONModel();
+            oModel.loadData(url, null, false);
+            return oModel;
+        };
+
+        // Function to update the model of an UI object
+
+        var updateModelOfUiObject = function(id, model){
+            var object = sap.ui.getCore().getElementById(id);
+            object.setModel(model);
+        };
+
+        function updateDataModel(model){
+            model.refresh();
+        }
+
+        // Function to retrieve the list of devices
+
+        var getDeviceList = function(){
+            // https://iotrdmsiotservices-YOURUSERIDtrial.hanatrial.ondemand.com/com.sap.iotservices.dms/api/devices
+            // <host> as described in https://help.hana.ondemand.com/iot/frameset.htm?77f28211989346559874381772e9dcc8.html
+            // Using the corresponding destination defined in neo-app.json
+            var devicesOdataUrl = “/rdms_api/devices”;
+            var oModelDevices = getModelFromURL(devicesOdataUrl);
+            var devices = oModelDevices.getData();
+            return devices;
+
+        };
+
+        // Function to retrieve the list of device types
+
+        var getDeviceTypeList = function(deviceTypeId){
+            var devicesTypesOdataUrl = “/rdms_api/devicetypes/” + deviceTypeId;
+            var oModelDeviceTypes = getModelFromURL(devicesTypesOdataUrl);
+            var deviceTypes = oModelDeviceTypes.getData();
+            return deviceTypes;
+        };
+
+        //  Function to request url for the odata request –>
+
+        var buildRequestUrlForSensorData = function(messageId, maxNumberSensorValues, deviceId, sortOrder){
+            // Here the corresponding settings for the odata-magic later on
+            // orderby: using the TIMESTAMP and sorting it according to the sortOrder
+            // top    : restricting the number of results
+            // format : set to use json
+            // filter : get all the sensor data for the specific DEVICE defined by the deviceId
+
+            var sensorDataUrl = “/sensordata/T_IOT_” + messageId + “?$orderby=C_STOREDAT ” + sortOrder + “&$top=” + maxNumberSensorValues + “&$format=json&$filter=G_DEVICE%20eq%20%27” + deviceId + “%27”;
+
+            return sensorDataUrl;
+
+        };
+
+    </script>
+
+    <!– ###################################################### –>
+    <!– All VIEWS                                                –>
+    <!– ###################################################### –>
+    <!– Functions for the MAIN PAGE of the app –>
+
+    <script type=”text/javascript”>
+
+        var buildMainPage = function(id, title) {
+            var page = new sap.m.Page(id, {
+                title : title,
+                showNavButton : false
+            });
+
+            return page;
+
+        };
+
+        var buildChartPage = function(id, oModel, sensorNumber, chart) {
+            var chartPage = new sap.m.Page(id , {
+                showNavButton: true, navButtonPress: function(){app.back();},
+                content : [chart]
+            });
+
+            chartPage.setModel(oModel);
+            chartPage.bindProperty(“title”, “/d/results[” + sensorNumber + “]/G_DEVICE”);
+            return chartPage;
+
+        };
+
+    </script>
+
+    <!– Functions for creating the SENSOR TILES of the app –>
+
+    <script type=”text/javascript”>
+
+        var buildSensorTileToChart = function(oModel, deviceNumber, deviceName , deviceTypeName, iconName) {
+
+            var tile = new sap.m.StandardTile(“mySensorTile” + deviceNumber, {
+
+                numberUnit : “Celsius”,
+
+                infoState : “Success”,
+
+                icon : sap.ui.core.IconPool.getIconURI(iconName),
+
+                press : function(oEvent) { app.to(“detailPageChart_sensor” + deviceNumber);},
+
+                tap  : function(oEvent) { app.to(“detailPageChart_sensor” + deviceNumber);},
+
+                info  : deviceTypeName,
+
+                title : deviceName
+
+            });
+
+            tile.setModel(oModel);
+
+            // All the bindings
+
+            // Bind only the first value (the request sorts by the creation timestamp)
+
+            tile.bindProperty(“number”, “/d/results/0/C_VALUE”, function(bValue) {
+
+                returnVal = Math.round(bValue * 10) / 10 ;
+
+                return returnVal + “\u00b0”;
+
+            });
+
+            return tile;
+
+        };
+
+    </script>
+
+    <!– Function for creating the TEMPERATURE CHARTS OF A SENSOR –>
+
+    <script type=”text/javascript”>
+
+        var getChartForMetric = function(id, model, bindingName, minValue, maxValue){
+
+            var oChart = new sap.makit.Chart(id, {
+
+            height: “90%”,
+
+            width : “100%”,
+
+            type: sap.makit.ChartType.Line,
+
+            category : new sap.makit.Category({ column : “C_STOREDAT” }),
+
+            categoryAxis : new sap.makit.CategoryAxis({ displayLastLabel: true}),
+
+            valueAxis    : new sap.makit.ValueAxis({  min:minValue, max:maxValue}),
+
+            values      :  [new sap.makit.Value({ expression : “C_VALUE”, displayName : “Temperature”})]
+
+            });
+
+     
+
+              oChart.addColumn(new sap.makit.Column({name:”C_STOREDAT”, value:”{C_STOREDAT}”}));
+
+            oChart.addColumn(new sap.makit.Column({name:”C_VALUE”, value:”{C_VALUE}”, type:”number”}));
+
+            oChart.setModel(model);
+
+            oChart.bindRows(bindingName);
+
+     
+
+            return oChart;
+
+        };
+
+    </script>
+
+    <!– ###################################################### –>
+
+    <!– THE MAIN APP                                            –>
+
+    <!– ###################################################### –>
+
+    <script type=”text/javascript”>
+
+        jQuery.sap.require(“sap.ui.core.IconPool”);
+
+        jQuery.sap.require(“sap.ui.core.Icon”);
+
+        jQuery.sap.declare(“sap.ui.customized.FontIconContainer”);
+
+        // Maximum number of sensor values used for the chart
+
+        var maxNumberSensorValues = 10;
+
+        // The message ID you want to get the sensor values from
+
+        var messageId = “YOUR MESSAGE TYPE ID “.toUpperCase();
+
+        var idPageMain = “main”;
+
+        var app = new sap.m.App(“myApp”, {
+
+            initialPage : idPageMain
+
+        });
+
+        // Now create the page and place it into the HTML document
+
+        var mainPage = buildMainPage(idPageMain, “Rui’s Fish Import/Export Inc.”);
+
+        var appLink = window.location.href;
+
+        // Get list of devices
+
+        var devices = getDeviceList();
+
+        // Loop through all the devices that have been found
+
+        for (var deviceNumber = 0; deviceNumber < devices.length ; deviceNumber++){
+
+            var deviceId  = devices[deviceNumber].id;
+
+            var deviceName = devices[deviceNumber].name;
+
+            // Get device type details for  device
+
+            var deviceTypes      = getDeviceTypeList(devices[deviceNumber].device_type);
+
+            var deviceTypeName  = deviceTypes.name;
+
+            // Build the URL for the request to get the most recent sensor value
+
+            var singleSensorValueUrl    = buildRequestUrlForSensorData(messageId, 1, deviceId, “desc”);
+
+            // Retrieve the model data for the singleSensorValueUrl (contains measured sensor value)
+
+            var oModelSingleSensorValue = getModelFromURL(singleSensorValueUrl);
+
+            // Build the URL for the request to get the most recent sensor values for the chart
+
+            var sensorValuesUrl    = buildRequestUrlForSensorData(messageId, maxNumberSensorValues, deviceId, “desc”);
+
+            // Retrieve the model data for the singleSensorValueUrl (contains measured sensor values)
+
+            var oModelSensorValues = getModelFromURL(sensorValuesUrl);
+
+            // Build the tile to be displayed
+
+            var sensorTile = buildSensorTileToChart(oModelSingleSensorValue, deviceNumber, deviceName, deviceTypeName, “temperature”);
+
+            var chart_sensor = getChartForMetric(“chart_sensor” + deviceNumber, oModelSensorValues, “/d/results”, “”,””);
+
+            var detailPageChart_sensor = buildChartPage(“detailPageChart_sensor” + deviceNumber,oModelSensorValues, deviceNumber ,chart_sensor);
+
+            mainPage.addContent(sensorTile);
+
+            app.addPage(detailPageChart_sensor);
+
+        }
+
+        app.addPage(mainPage);
+
+        app.setBackgroundRepeat(true);
+
+        app.placeAt(“content”);
+
+        //Update the values in the tiles and charts every x ms
+
+        var updateInMilliseconds = 2000;
+
+        setInterval(function() {
+
+            for (var deviceNumber = 0; deviceNumber < devices.length ; deviceNumber++){
+
+                var deviceId  = devices[deviceNumber].id;
+
+                var singleSensorValueUrl    = buildRequestUrlForSensorData(messageId, 1, deviceId, “desc”);
+
+                var oModelSingleSensorValue = getModelFromURL(singleSensorValueUrl);
+
+                updateDataModel(oModelSingleSensorValue);
+
+                updateModelOfUiObject(“mySensorTile” + deviceNumber,oModelSingleSensorValue);
+
+       
+
+                var sensorValuesUrl    = buildRequestUrlForSensorData(messageId, maxNumberSensorValues, deviceId, “desc”);
+
+                var oModelSensorValues = getModelFromURL(sensorValuesUrl);
+
+                updateDataModel(oModelSensorValues);
+
+                updateModelOfUiObject(“chart_sensor” + deviceNumber,oModelSensorValues);
+
+            }
+
+        }, updateInMilliseconds);
+
+    </script>
+
+    </head>
+
+    <body class=”sapUiBody”>
+
+        <div id=”content”></div>
+
+    </body>
+
+    </html>
